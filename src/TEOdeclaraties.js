@@ -29,7 +29,7 @@ import {
 
 // --- CONFIGURATIE ---
 const GOOGLE_SCRIPT_URL =
-  "https://script.google.com/macros/s/AKfycbwL3CNGGu6_GsCsJEYRSLegaFuft8TvKpHtw0Wddhsw3v--1-1SA3qDEq21HNB8DanP5A/exec";
+  "https://script.google.com/a/macros/theexperienceoffice.nl/s/AKfycbz0dULntwva_jffI2vYBjiMoXbGvhckwwelP1ndwcOqTRAdorT3BaB01wnUDpVrA3cW/exec";
 const TOEGANGSCODE = "3521";
 
 // --- HUISSTIJL CONFIGURATIE ---
