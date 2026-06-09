@@ -51,7 +51,7 @@ const COLORS = {
 const GROOTBOEK_OPTIES = [
   { code: "4055", naam: "Kantinekosten" },
   { code: "4070", naam: "Representatie en verteer" },
-  { code: "4075", naam: "Onbelaste reiskosten (23 ct per km)" },
+  { code: "4075", naam: "Onbelaste reiskosten (25 ct per km)" },
   { code: "5520", naam: "Kantoorkosten" },
   { code: "5540", naam: "Verkoopkosten" },
   { code: "5570", naam: "Reis- en verblijfkosten" },
@@ -59,7 +59,7 @@ const GROOTBOEK_OPTIES = [
   { code: "7100", naam: "Inkoop derden (OOP)" },
 ];
 
-const KM_VERGOEDING = 0.23;
+const KM_VERGOEDING = 0.25;
 const STANDAARD_MEDEWERKERS = [
   {
     id: 1,
