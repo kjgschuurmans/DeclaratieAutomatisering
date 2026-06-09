@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Camera,
   FileText,
@@ -25,11 +25,12 @@ import {
   ShoppingCart,
   Eye,
   EyeOff,
+  ChevronDown,
 } from "lucide-react";
 
 // --- CONFIGURATIE ---
 const GOOGLE_SCRIPT_URL =
-  "https://script.google.com/macros/s/AKfycbwL3CNGGu6_GsCsJEYRSLegaFuft8TvKpHtw0Wddhsw3v--1-1SA3qDEq21HNB8DanP5A/exec";
+  "https://script.google.com/a/macros/theexperienceoffice.nl/s/AKfycbz0dULntwva_jffI2vYBjiMoXbGvhckwwelP1ndwcOqTRAdorT3BaB01wnUDpVrA3cW/exec";
 const TOEGANGSCODE = "3521";
 
 // --- HUISSTIJL CONFIGURATIE ---
@@ -79,18 +80,46 @@ const STANDAARD_MEDEWERKERS = [
 
 const MONEY_GIFS = [
   "https://media.giphy.com/media/l0Ex6kAKAoFRsFh6M/giphy.gif", // DiCaprio money
-  "https://media.giphy.com/media/67ThRZlYBkpenzqEUu/giphy.gif", // DuckTales coins
-  "https://media.giphy.com/media/ADgfsbHcXf7Y4/giphy.gif", // Money flying
   "https://media.giphy.com/media/3o6gDWzmAzrpi5DQU8/giphy.gif", // Make it rain
   "https://media.giphy.com/media/9HQRIttS5C4Za/giphy.gif", // Jerry Maguire show me the money
+  "https://media.giphy.com/media/sDcfxFDozb3bO/giphy.gif",      // Futurama Fry: "Shut up and take my money"
+  "https://media.giphy.com/media/LCdPNT81vlv3y/giphy.gif",      // Fresh Prince (Will Smith): Make it rain
+  "https://media.giphy.com/media/ND6xkVPaj8tHO/giphy.gif",      // Spongebob: Gooit geld in de lucht
+  "https://media.giphy.com/media/13B1WmJg7HwjGU/giphy.gif",     // Austin Powers: Dr. Evil "One Million Dollars"
+  "https://media.giphy.com/media/JpG2A9P3dPHXaTYrwu/giphy.gif",  // Kat met stapel dollars
+  "https://media.giphy.com/media/MFsqcBSoOKPbjtmvWz/giphy.gif",  // Homer Simpson: Zwembad vol geld
+  "https://media.giphy.com/media/gJha9m3045fsOG0Zhk/giphy.gif",  // Lege portemonnee (Let op: dit is een 'geen geld' gifje!)
+  "https://media.giphy.com/media/f7MO098FCipmq0eUpV/giphy.gif",  // Illustratie: Make it rain
+  "https://media.giphy.com/media/9GLiEBLM0qiSQ/giphy.gif",       // Dr. Evil: Pinky finger
+  "https://media.giphy.com/media/G3yZQxmuw3PgI/giphy.gif",       // Friday (film): Throwing money
+  "https://media.giphy.com/media/LdOyjZ7io5Msw/giphy.gif",       // Parks & Rec: Mona Lisa "Money Please!"
+  "https://media.giphy.com/media/gQdejV5BBChHi/giphy.gif",       // DuckTales: Scrooge McDuck duik
+  "https://media.giphy.com/media/3oxOCgMHgPtSUULjzO/giphy.gif",  // Spongebob: "Put the money in the bag"
+  "https://media.giphy.com/media/SOmjomEnNHsrK/giphy.gif",       // Minions: Kopiëren hun billen (of geld?)
+  "https://media.giphy.com/media/uyWTOgNGGWfks/giphy.gif",       // Rihanna: Telgebaren / money
+  "https://media.giphy.com/media/cXMFmN3edhlHI5vRsG/giphy.gif",  // Hondje (Maltipoo): Rijk met zonnebril
+  "https://media.giphy.com/media/1hMhl5fpuLldDqj0Ey/giphy.gif",  // Migos & James Corden: Carpool Karaoke cash
+  "https://media.giphy.com/media/gVROkjyShPnos/giphy.gif",       // Dikke kat die geaaid wordt met geld
+  "https://media.giphy.com/media/hKjBs0PcYzbDtExdVJ/giphy.gif",  // GigaChad: Geld tellen (G2 Esports)
+  "https://media.giphy.com/media/xTka04xVPdPVmSis7e/giphy.gif",  // Flintstones / Halifax: Fred Flintstone bij de bank
+  "https://media.giphy.com/media/3o8dp3z1qMdvfOgv28/giphy.gif",  // Top Cat / Halifax: Bankieren
+  "https://media.giphy.com/media/RoS4JYcw0RvK8/giphy.gif"        // Stapels geld (Money stacks)
 ];
 
-// --- HULPFUNCTIES ---
 
+// --- HULPFUNCTIES ---
 const formatDateNL = (isoDate) => {
   if (!isoDate) return "";
   const [y, m, d] = isoDate.split("-");
   return `${d}-${m}-${y}`;
+};
+
+const parseDecimalInput = (val) => {
+  // Vervang alle letters en vreemde tekens, behoud nummers, punt en komma
+  let cleaned = String(val).replace(/[^0-9.,]/g, "");
+  // Als er een komma staat, behandel deze achter de schermen als een punt voor berekeningen
+  let parseable = cleaned.replace(/,/g, ".");
+  return { weergegevenWaarde: cleaned, rekenWaarde: parseFloat(parseable) };
 };
 
 async function scanWithBackend(base64Image) {
@@ -138,7 +167,144 @@ async function convertPdfToImage(pdfBase64) {
   }
 }
 
-// --- LOGIN (HUISSTIJL & VIP VIBE) ---
+// --- PROJECT DROPDOWN COMPONENT ---
+const ProjectDropdown = ({ value, onChange, projecten, setProjecten, syncProjecten }) => {
+  const [isOpen, setIsOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const dropdownRef = useRef(null);
+
+  // Sluit dropdown als je erbuiten klikt
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  const actieveProjecten = projecten.filter((p) => p.actief);
+  
+  // Slimme filter: zoekt op losse letters/woorden in willekeurige volgorde
+  const gefilterdeProjecten = query === "" 
+    ? actieveProjecten 
+    : actieveProjecten.filter((p) => 
+        p.naam.toLowerCase().replace(/\s+/g, '').includes(query.toLowerCase().replace(/\s+/g, ''))
+      );
+
+  // Sorteer op laatst gebruikt (indien aanwezig)
+  gefilterdeProjecten.sort((a, b) => {
+    if (!a.lastUsed) return 1;
+    if (!b.lastUsed) return -1;
+    return new Date(b.lastUsed) - new Date(a.lastUsed);
+  });
+
+  const selectedProjectName = projecten.find(p => p.id === value)?.naam || "";
+
+  const handleSelect = (id) => {
+    onChange(id);
+    setQuery("");
+    setIsOpen(false);
+  };
+
+  const handleCreate = async () => {
+    if (!query) return;
+    const newProject = {
+      id: Date.now(),
+      naam: query,
+      actief: true,
+      lastUsed: new Date().toISOString()
+    };
+    const updatedList = [...projecten, newProject];
+    setProjecten(updatedList);
+    onChange(newProject.id);
+    setQuery("");
+    setIsOpen(false);
+    await syncProjecten(updatedList);
+  };
+
+  const handleDeactivate = async (e, id) => {
+    e.stopPropagation();
+    if (window.confirm("Project archiveren en uit deze lijst halen?")) {
+      const updatedList = projecten.map(p => p.id === id ? { ...p, actief: false } : p);
+      setProjecten(updatedList);
+      if (value === id) onChange("");
+      await syncProjecten(updatedList);
+    }
+  };
+
+  return (
+    <div className="relative font-['Lato']" ref={dropdownRef}>
+      <div 
+        className={`w-full p-3 border rounded-lg bg-white flex justify-between items-center cursor-text transition-colors ${isOpen ? 'border-[#003B95] ring-2 ring-blue-100' : 'border-gray-300'}`}
+        onClick={() => setIsOpen(true)}
+      >
+        {!isOpen && selectedProjectName ? (
+           <div className="flex-1 flex items-center justify-between">
+              <span className="font-medium text-gray-800">{selectedProjectName}</span>
+              <button 
+                onClick={(e) => { e.stopPropagation(); onChange(""); setIsOpen(true); }}
+                className="text-gray-400 hover:text-gray-600"
+              >
+                <X size={16} />
+              </button>
+           </div>
+        ) : (
+          <input
+            type="text"
+            className="w-full outline-none bg-transparent placeholder-gray-400"
+            placeholder={selectedProjectName || "Zoek of typ een nieuw project..."}
+            value={query}
+            onChange={(e) => { setQuery(e.target.value); setIsOpen(true); }}
+            onFocus={() => setIsOpen(true)}
+          />
+        )}
+        {!isOpen && !selectedProjectName && <ChevronDown size={18} className="text-gray-400" />}
+      </div>
+
+      {isOpen && (
+        <div className="absolute z-20 w-full mt-2 bg-white border border-gray-200 rounded-xl shadow-xl max-h-64 overflow-y-auto">
+          <div className="p-2 text-xs font-bold text-gray-400 uppercase tracking-wider sticky top-0 bg-white/90 backdrop-blur border-b">
+            Projecten
+          </div>
+          {gefilterdeProjecten.length > 0 ? (
+            gefilterdeProjecten.map((p) => (
+              <div 
+                key={p.id} 
+                className="flex items-center justify-between p-3 hover:bg-blue-50 cursor-pointer border-b border-gray-50 last:border-0 group"
+                onClick={() => handleSelect(p.id)}
+              >
+                <span className="text-gray-800 font-medium">{p.naam}</span>
+                <button 
+                  onClick={(e) => handleDeactivate(e, p.id)}
+                  className="text-gray-300 hover:text-red-500 opacity-0 group-hover:opacity-100 transition p-1"
+                  title="Archiveren"
+                >
+                  <Trash2 size={16} />
+                </button>
+              </div>
+            ))
+          ) : (
+            <div className="p-4 text-center text-gray-500 text-sm">Geen bestaande projecten gevonden</div>
+          )}
+          
+          {query && !gefilterdeProjecten.some(p => p.naam.toLowerCase() === query.toLowerCase()) && (
+            <div 
+              className="p-3 bg-yellow-50 hover:bg-yellow-100 cursor-pointer flex items-center gap-2 border-t border-yellow-200 text-yellow-800 font-medium"
+              onClick={handleCreate}
+            >
+              <div className="bg-yellow-200 px-2 py-1 rounded text-xs">Maak</div>
+              "{query}"
+            </div>
+          )}
+        </div>
+      )}
+    </div>
+  );
+};
+
+// --- LOGIN ---
 const LoginView = ({ onLogin }) => {
   const [code, setCode] = useState("");
   const [error, setError] = useState(false);
@@ -186,9 +352,7 @@ const LoginView = ({ onLogin }) => {
                 inputMode="numeric"
                 pattern="[0-9]*"
                 className={`w-full p-4 text-center text-3xl tracking-[0.5em] font-['Poppins'] bg-white/20 border-2 rounded-xl outline-none transition text-white placeholder-white/30 focus:bg-white/30 ${
-                  error
-                    ? "border-red-400 shake"
-                    : "border-white/30 focus:border-white"
+                  error ? "border-red-400 shake" : "border-white/30 focus:border-white"
                 }`}
                 placeholder="••••"
                 value={code}
@@ -339,7 +503,7 @@ const MedewerkerView = ({
               type="email"
               className="w-full p-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-[#003B95] outline-none font-['Lato']"
               value={nieuwEmail}
-              onChange={(e) => setNieuweNaam(e.target.value)}
+              onChange={(e) => setNieuwEmail(e.target.value)} // AANPASSING BUGINVOER
               placeholder="Email"
             />
             <div className="flex gap-2 pt-2">
@@ -366,7 +530,6 @@ const MedewerkerView = ({
 const HomeView = ({
   setView,
   actieveMedewerker,
-  setActieveMedewerker,
   setShowGlobalPopup,
 }) => {
   return (
@@ -458,11 +621,16 @@ const FormulierView = ({
   setView,
   opslaanDeclaratie,
   hasDeclaraties,
+  projecten,
+  setProjecten,
+  syncProjecten,
+  aiFields,
+  setAiFields,
+  categoryConfirmed,
+  setCategoryConfirmed
 }) => {
   const [isScanning, setIsScanning] = useState(false);
   const [calculatingDistance, setCalculatingDistance] = useState(false);
-  const [aiFields, setAiFields] = useState({});
-  const [categoryConfirmed, setCategoryConfirmed] = useState(false);
   const [showSplitView, setShowSplitView] = useState(false);
 
   const isAfwijkendBtw = huidigeDeclaratie.btwPercentage === "custom";
@@ -480,14 +648,27 @@ const FormulierView = ({
     let updates = { [field]: value };
     let newState = { ...huidigeDeclaratie, ...updates };
 
+    // --- AANPASSING: Decimale komma's of punten netjes filteren ---
+    if (field === "totaalBedrag" || field === "kilometers" || field === "btwBedrag") {
+       const result = parseDecimalInput(value);
+       updates[field] = result.weergegevenWaarde; // Wat de gebruiker ziet in input (inclusief evt. komma)
+       newState[field] = result.rekenWaarde; // Wat we intern in de math logica hieronder gebruiken
+    }
+
     if (huidigeDeclaratie.type === "reiskosten") {
-      if (field === "kilometers")
-        updates.totaalBedrag = (parseFloat(value) * KM_VERGOEDING).toFixed(2);
+      if (field === "kilometers") {
+        const parsedKm = parseDecimalInput(value).rekenWaarde;
+        if(!isNaN(parsedKm)) {
+          const tot = (parsedKm * KM_VERGOEDING).toFixed(2);
+          updates.totaalBedrag = tot.replace('.', ','); // Mooiere weergave (optioneel, maar we houden het bij string)
+          updates.totaalBedrag = tot;
+        }
+      }
       else if (field === "isRetour") {
-        let newKm = value
-          ? parseFloat(huidigeDeclaratie.kilometers) * 2
-          : parseFloat(huidigeDeclaratie.kilometers) / 2;
-        updates.kilometers = newKm.toFixed(2);
+        let huidigeKm = parseDecimalInput(huidigeDeclaratie.kilometers).rekenWaarde || 0;
+        let newKm = value ? huidigeKm * 2 : huidigeKm / 2;
+        updates.kilometers = newKm.toString().replace('.', ',');
+        updates.kilometers = newKm.toString();
         updates.totaalBedrag = (newKm * KM_VERGOEDING).toFixed(2);
       }
     } else if (
@@ -495,18 +676,18 @@ const FormulierView = ({
       field === "btwPercentage" ||
       (field === "btwBedrag" && isAfwijkendBtw)
     ) {
-      const totaal = parseFloat(newState.totaalBedrag);
+      const totaal = parseDecimalInput(newState.totaalBedrag).rekenWaarde;
       const perc = newState.btwPercentage;
       if (!isNaN(totaal)) {
         if (perc === "custom") {
-          const manualVat = parseFloat(newState.btwBedrag) || 0;
+          const manualVat = parseDecimalInput(newState.btwBedrag).rekenWaarde || 0;
           updates.bedragExcl = (totaal - manualVat).toFixed(2);
         } else if (perc !== "" && !isNaN(parseFloat(perc))) {
           const percVal = parseFloat(perc);
           const excl = totaal / (1 + percVal / 100);
           const vatAmount = totaal - excl;
           updates.bedragExcl = excl.toFixed(2);
-          updates.btwBedrag = vatAmount.toFixed(2);
+          updates.btwBedrag = vatAmount.toFixed(2); // Standaard opslaan als string met punt voor form
         }
       }
     }
@@ -601,6 +782,7 @@ const FormulierView = ({
               btwPercentage: percVal,
               btwBedrag: newVat,
               bedragExcl: newExcl,
+              leverancier: scanResult.leverancier || prev.leverancier,
               omschrijving: scanResult.omschrijving || "",
               grootboek: scanResult.grootboek || "",
             };
@@ -621,10 +803,7 @@ const FormulierView = ({
     if (hasDeclaraties) setView("overzicht");
     else setView("keuze_type");
   };
-  const omschrijvingPlaceholder =
-    huidigeDeclaratie.type === "reiskosten"
-      ? "Bijv. Vervoer naar klant"
-      : "Bijv. Lunch klant X of Project 1234";
+  
   const getFieldStyle = (fieldName) => {
     if (aiFields[fieldName])
       return "border-purple-500 bg-purple-50 focus:ring-purple-500";
@@ -632,12 +811,11 @@ const FormulierView = ({
   };
 
   const isFormValid = () => {
-    const { datum, omschrijving, totaalBedrag, grootboek, btwPercentage } =
-      huidigeDeclaratie;
-    if (!datum || !totaalBedrag || !grootboek) return false;
+    const { datum, omschrijving, totaalBedrag, grootboek, btwPercentage, project } = huidigeDeclaratie;
+    if (!datum || !totaalBedrag || !grootboek || !project || !omschrijving) return false;
     if (
       huidigeDeclaratie.type === "onkosten" &&
-      (!omschrijving || !btwPercentage || btwPercentage === "")
+      (!huidigeDeclaratie.leverancier || !btwPercentage || btwPercentage === "")
     )
       return false;
     if (isAiCategory && !categoryConfirmed) return false;
@@ -739,11 +917,30 @@ const FormulierView = ({
           )}
 
           <div className="space-y-4 font-['Lato']">
+            
+            {/* SPLITSING: PROJECT */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Project *
+              </label>
+              <ProjectDropdown 
+                value={huidigeDeclaratie.project}
+                onChange={(val) => {
+                  updateField("project", val);
+                  const pName = projecten.find(p => p.id === val)?.naam;
+                  updateField("projectNaam", pName || "");
+                }}
+                projecten={projecten}
+                setProjecten={setProjecten}
+                syncProjecten={syncProjecten}
+              />
+            </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 {huidigeDeclaratie.type === "reiskosten"
-                  ? "Datum van rit"
-                  : "Factuurdatum"}
+                  ? "Datum van rit *"
+                  : "Factuurdatum *"}
               </label>
               <div className="relative">
                 <input
@@ -761,101 +958,133 @@ const FormulierView = ({
               </div>
             </div>
 
-            {huidigeDeclaratie.type === "reiskosten" && (
-              <div className="grid grid-cols-2 gap-4">
-                <div className="col-span-2">
+            {/* SPLITSING: ONKOSTEN (Leverancier + Omschrijving) */}
+            {huidigeDeclaratie.type === "onkosten" && (
+              <>
+                <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Traject
-                  </label>
-                  <div className="flex gap-2 items-center">
-                    <input
-                      type="text"
-                      placeholder="Van"
-                      className="flex-1 p-3 border rounded-lg"
-                      value={huidigeDeclaratie.van}
-                      onChange={(e) => updateField("van", e.target.value)}
-                    />
-                    <ArrowRight size={16} className="text-gray-400" />
-                    <input
-                      type="text"
-                      placeholder="Naar"
-                      className="flex-1 p-3 border rounded-lg"
-                      value={huidigeDeclaratie.naar}
-                      onChange={(e) => updateField("naar", e.target.value)}
-                    />
-                  </div>
-                  <div className="flex justify-between items-center mt-2">
-                    <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700">
-                      <input
-                        type="checkbox"
-                        className="w-4 h-4 text-[#003B95] rounded"
-                        checked={huidigeDeclaratie.isRetour || false}
-                        onChange={(e) =>
-                          updateField("isRetour", e.target.checked)
-                        }
-                      />
-                      <span>Retour (x2)</span>
-                    </label>
-                    <button
-                      onClick={berekenAfstand}
-                      disabled={
-                        calculatingDistance ||
-                        !huidigeDeclaratie.van ||
-                        !huidigeDeclaratie.naar
-                      }
-                      className="text-sm bg-blue-50 text-[#003B95] px-3 py-1 rounded hover:bg-blue-100 flex items-center gap-1 font-bold"
-                    >
-                      {calculatingDistance ? (
-                        <Loader className="animate-spin" size={14} />
-                      ) : (
-                        <MapPin size={14} />
-                      )}{" "}
-                      {calculatingDistance ? "Berekenen..." : "Bereken afstand"}
-                    </button>
-                  </div>
-                </div>
-                <div className="col-span-2 md:col-span-1">
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    Aantal kilometers
+                    Leverancier *
                   </label>
                   <input
-                    type="number"
-                    placeholder="0"
-                    className="w-full p-3 border border-gray-300 rounded-lg bg-yellow-50 font-medium"
-                    value={huidigeDeclaratie.kilometers}
-                    onChange={(e) => updateField("kilometers", e.target.value)}
+                    type="text"
+                    className={`w-full p-3 border rounded-lg outline-none transition ${getFieldStyle("leverancier")}`}
+                    placeholder="Bijv. Coolblue"
+                    value={huidigeDeclaratie.leverancier}
+                    onChange={(e) => updateField("leverancier", e.target.value)}
                   />
-                  <p className="text-xs text-gray-500 mt-1">
-                    x €{KM_VERGOEDING}/km
-                  </p>
                 </div>
-              </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Omschrijving onkosten *
+                  </label>
+                  <input
+                    type="text"
+                    className={`w-full p-3 border rounded-lg outline-none transition ${getFieldStyle("omschrijving")}`}
+                    placeholder="Wat heb je gekocht/besteld?"
+                    value={huidigeDeclaratie.omschrijving}
+                    onChange={(e) => updateField("omschrijving", e.target.value)}
+                  />
+                </div>
+              </>
             )}
 
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
-                Omschrijving / Referentie
-              </label>
-              <input
-                type="text"
-                className={`w-full p-3 border rounded-lg outline-none transition ${getFieldStyle(
-                  "omschrijving"
-                )}`}
-                placeholder={omschrijvingPlaceholder}
-                value={huidigeDeclaratie.omschrijving}
-                onChange={(e) => updateField("omschrijving", e.target.value)}
-              />
-            </div>
+            {/* SPLITSING: REISKOSTEN (Rit Omschrijving + Traject) */}
+            {huidigeDeclaratie.type === "reiskosten" && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    Omschrijving *
+                  </label>
+                  <input
+                    type="text"
+                    className={`w-full p-3 border rounded-lg outline-none transition ${getFieldStyle("omschrijving")}`}
+                    placeholder="Bijv. Vervoer eindproduct naar klant"
+                    value={huidigeDeclaratie.omschrijving}
+                    onChange={(e) => updateField("omschrijving", e.target.value)}
+                  />
+                </div>
+                <div className="grid grid-cols-2 gap-4">
+                  <div className="col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Traject
+                    </label>
+                    <div className="flex gap-2 items-center">
+                      <input
+                        type="text"
+                        placeholder="Van"
+                        className="flex-1 p-3 border rounded-lg"
+                        value={huidigeDeclaratie.van}
+                        onChange={(e) => updateField("van", e.target.value)}
+                      />
+                      <ArrowRight size={16} className="text-gray-400" />
+                      <input
+                        type="text"
+                        placeholder="Naar"
+                        className="flex-1 p-3 border rounded-lg"
+                        value={huidigeDeclaratie.naar}
+                        onChange={(e) => updateField("naar", e.target.value)}
+                      />
+                    </div>
+                    <div className="flex justify-between items-center mt-2">
+                      <label className="flex items-center gap-2 cursor-pointer text-sm text-gray-700">
+                        <input
+                          type="checkbox"
+                          className="w-4 h-4 text-[#003B95] rounded"
+                          checked={huidigeDeclaratie.isRetour || false}
+                          onChange={(e) =>
+                            updateField("isRetour", e.target.checked)
+                          }
+                        />
+                        <span>Retour (x2)</span>
+                      </label>
+                      <button
+                        onClick={berekenAfstand}
+                        disabled={
+                          calculatingDistance ||
+                          !huidigeDeclaratie.van ||
+                          !huidigeDeclaratie.naar
+                        }
+                        className="text-sm bg-blue-50 text-[#003B95] px-3 py-1 rounded hover:bg-blue-100 flex items-center gap-1 font-bold"
+                      >
+                        {calculatingDistance ? (
+                          <Loader className="animate-spin" size={14} />
+                        ) : (
+                          <MapPin size={14} />
+                        )}{" "}
+                        {calculatingDistance ? "Berekenen..." : "Bereken afstand"}
+                      </button>
+                    </div>
+                  </div>
+                  <div className="col-span-2 md:col-span-1">
+                    <label className="block text-sm font-medium text-gray-700 mb-1">
+                      Aantal kilometers
+                    </label>
+                    <input
+                      type="text"
+                      inputMode="decimal"
+                      placeholder="0"
+                      className="w-full p-3 border border-gray-300 rounded-lg bg-yellow-50 font-medium"
+                      value={huidigeDeclaratie.kilometers}
+                      onChange={(e) => updateField("kilometers", e.target.value)}
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      x €{KM_VERGOEDING}/km
+                    </p>
+                  </div>
+                </div>
+              </>
+            )}
 
             <div className="grid grid-cols-2 gap-4">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
-                  Totaalbedrag (incl. BTW)
+                  Totaalbedrag (incl. BTW) *
                 </label>
                 <div className="relative">
                   <span className="absolute left-3 top-3 text-gray-500">€</span>
                   <input
-                    type="number"
+                    type="text"
+                    inputMode="decimal"
                     className={`w-full p-3 pl-8 border rounded-lg outline-none transition ${getFieldStyle(
                       "totaalBedrag"
                     )}`}
@@ -871,7 +1100,7 @@ const FormulierView = ({
               {huidigeDeclaratie.type !== "reiskosten" && (
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">
-                    BTW percentage
+                    BTW percentage *
                   </label>
                   <select
                     className={`w-full p-3 border rounded-lg bg-white ${getFieldStyle(
@@ -882,7 +1111,7 @@ const FormulierView = ({
                       updateField("btwPercentage", e.target.value)
                     }
                   >
-                    <option value="">-- Kies BTW percentage --</option>
+                    <option value="">-- Kies --</option>
                     <option value="21">21% (Hoog)</option>
                     <option value="9">9% (Laag)</option>
                     <option value="0">0% / Geen</option>
@@ -908,7 +1137,8 @@ const FormulierView = ({
                         €
                       </span>
                       <input
-                        type="number"
+                        type="text"
+                        inputMode="decimal"
                         className="w-full p-2 pl-6 border border-blue-300 rounded focus:ring-2 focus:ring-[#003B95] outline-none bg-white"
                         value={huidigeDeclaratie.btwBedrag}
                         onChange={(e) =>
@@ -934,7 +1164,7 @@ const FormulierView = ({
               }`}
             >
               <label className="block text-sm font-medium text-gray-700 mb-1">
-                Grootboekrekening (Categorie)
+                Grootboekrekening (Categorie) *
                 {aiFields.grootboek && (
                   <span className="ml-2 text-purple-600 text-xs font-bold flex items-center inline-flex gap-1">
                     <Sparkles size={10} /> AI Suggestie
@@ -1067,29 +1297,32 @@ const OverzichtView = ({
   setShowGlobalPopup,
 }) => {
   const totaalGeneraal = declaraties.reduce(
-    (sum, d) => sum + parseFloat(d.totaalBedrag || 0),
+    (sum, d) => sum + parseFloat(String(d.totaalBedrag).replace(',', '.') || 0),
     0
   );
   const totaalBTW = declaraties.reduce(
-    (sum, d) => sum + parseFloat(d.btwBedrag || 0),
+    (sum, d) => sum + parseFloat(String(d.btwBedrag).replace(',', '.') || 0),
     0
   );
 
   const summary = declaraties.reduce((acc, curr) => {
     const catCode = curr.grootboek || "9";
-    const catNaam =
-      GROOTBOEK_OPTIES.find((o) => o.code === catCode)?.naam || "Onbekend";
-    const key = `${catCode}) ${catNaam}`;
+    const catNaam = GROOTBOEK_OPTIES.find((o) => o.code === catCode)?.naam || "Onbekend";
+    
+    // --- GROEPERING OP CATEGORIE ÉN BTW ---
+    const btwStr = curr.btwPercentage !== "" && curr.btwPercentage !== null ? curr.btwPercentage + "%" : "0%";
+    const finalBtwStr = curr.btwPercentage === "custom" ? "Afwijkend" : btwStr;
+    const key = `${catCode}) ${catNaam}__||__${finalBtwStr}`;
 
-    if (!acc[key]) acc[key] = { excl: 0, vat: 0, total: 0 };
-    acc[key].excl += parseFloat(curr.bedragExcl || 0);
-    acc[key].vat += parseFloat(curr.btwBedrag || 0);
-    acc[key].total += parseFloat(curr.totaalBedrag || 0);
+    if (!acc[key]) acc[key] = { name: `${catCode}) ${catNaam}`, btw: finalBtwStr, excl: 0, vat: 0, total: 0 };
+    acc[key].excl += parseFloat(String(curr.bedragExcl).replace(',', '.') || 0);
+    acc[key].vat += parseFloat(String(curr.btwBedrag).replace(',', '.') || 0);
+    acc[key].total += parseFloat(String(curr.totaalBedrag).replace(',', '.') || 0);
     return acc;
   }, {});
 
   return (
-    <div className="max-w-4xl mx-auto p-6 animate-in fade-in duration-300 relative">
+    <div className="max-w-5xl mx-auto p-6 animate-in fade-in duration-300 relative">
       <div className="flex justify-between items-end mb-6 print:hidden">
         <div>
           <h2 className="text-2xl font-bold text-[#003B95] font-['Poppins']">
@@ -1112,43 +1345,14 @@ const OverzichtView = ({
         </button>
       </div>
 
-      <div className="hidden print:block mb-8 border-b-2 border-black pb-4">
-        <h1 className="text-3xl font-bold mb-2 font-['Poppins']">
-          Declaratie-formulier
-        </h1>
-        <div className="flex justify-between text-sm font-['Lato']">
-          <div>
-            <p>
-              <strong>Medewerker:</strong> {actieveMedewerker?.naam}
-            </p>
-            <p>
-              <strong>E-mail:</strong> {actieveMedewerker?.email}
-            </p>
-            <p>
-              <strong>Datum Indiening:</strong>{" "}
-              {formatDateNL(new Date().toISOString().split("T")[0])}
-            </p>
-          </div>
-          <div className="text-right">
-            <p>
-              <strong>Periode:</strong>{" "}
-              {new Date().toLocaleString("default", {
-                month: "long",
-                year: "numeric",
-              })}
-            </p>
-          </div>
-        </div>
-      </div>
-
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6">
         <table className="w-full text-left font-['Lato']">
           <thead className="bg-gray-50 text-gray-600 text-sm">
             <tr>
               <th className="p-4">Factuurdatum</th>
-              <th className="p-4">Omschrijving</th>
-              <th className="p-4">Grootboekrek.</th>
-              <th className="p-4 text-right">BTW</th>
+              <th className="p-4">Project / Lev / Omschrijving</th>
+              <th className="p-4">Categorie</th>
+              <th className="p-4 text-right">BTW %</th>
               <th className="p-4 text-right">Totaal</th>
               <th className="p-4 print:hidden text-center"></th>
             </tr>
@@ -1156,41 +1360,46 @@ const OverzichtView = ({
           <tbody className="divide-y divide-gray-100">
             {declaraties.map((dec) => (
               <tr key={dec.id} className="hover:bg-gray-50 transition">
-                <td className="p-4 text-sm text-gray-500 whitespace-nowrap">
+                <td className="p-4 text-sm text-gray-500 whitespace-nowrap align-top">
                   {formatDateNL(dec.datum)}
                 </td>
-                <td className="p-4 font-medium text-gray-900">
-                  {dec.omschrijving}
-                  {dec.type === "reiskosten" && (
-                    <div className="text-xs text-gray-500 mt-1">
-                      <span
-                        className={`font-bold ${
-                          dec.isRetour ? "text-[#003B95]" : "text-gray-600"
-                        }`}
-                      >
-                        {dec.isRetour ? "RETOUR" : "ENKELE REIS"}
-                      </span>
-                      : {dec.van} &rarr; {dec.naar} <br /> ({dec.kilometers} km)
-                    </div>
+                <td className="p-4 font-medium text-gray-900 align-top">
+                  <div className="text-xs font-bold text-[#003B95] uppercase mb-1">{dec.projectNaam || "Geen project"}</div>
+                  {dec.type === "reiskosten" ? (
+                    <>
+                      <div>{dec.omschrijving}</div>
+                      <div className="text-xs text-gray-500 mt-1">
+                        <span className={`font-bold ${dec.isRetour ? "text-[#003B95]" : "text-gray-600"}`}>
+                          {dec.isRetour ? "RETOUR" : "ENKEL"}
+                        </span>
+                        : {dec.van} &rarr; {dec.naar} <br /> ({dec.kilometers} km)
+                      </div>
+                    </>
+                  ) : (
+                    <>
+                      <div className="text-sm font-semibold">{dec.leverancier || "Onbekende Lev."}</div>
+                      <div className="text-sm font-normal text-gray-600">{dec.omschrijving}</div>
+                    </>
                   )}
+                  
                   {dec.bestandNaam && (
-                    <span className="block text-xs text-green-600 flex items-center gap-1 mt-1">
+                    <span className="block text-xs text-green-600 flex items-center gap-1 mt-2">
                       <FileText size={12} /> {dec.bestandNaam}
                     </span>
                   )}
                 </td>
-                <td className="p-4 text-sm">
+                <td className="p-4 text-sm align-top">
                   <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-mono">
                     {dec.grootboek || "N/A"}
                   </span>
                 </td>
-                <td className="p-4 text-right text-sm text-gray-600">
-                  € {dec.btwBedrag || "0.00"}
+                <td className="p-4 text-right text-sm text-gray-600 align-top">
+                  {dec.btwPercentage === "custom" ? "Afwijkend" : (dec.btwPercentage ? dec.btwPercentage + "%" : "0%")}
                 </td>
-                <td className="p-4 text-right font-bold text-gray-900">
-                  € {dec.totaalBedrag}
+                <td className="p-4 text-right font-bold text-gray-900 align-top">
+                  € {parseFloat(String(dec.totaalBedrag).replace(',', '.')).toFixed(2)}
                 </td>
-                <td className="p-4 print:hidden flex justify-center gap-2">
+                <td className="p-4 print:hidden flex justify-center gap-2 align-top">
                   <button
                     onClick={() => bewerkDeclaratie(dec.id)}
                     className="text-blue-400 hover:text-blue-600 transition p-2 hover:bg-blue-50 rounded-full"
@@ -1215,7 +1424,7 @@ const OverzichtView = ({
                 Totaal deze declaratie:
               </td>
               <td className="p-4 text-right text-gray-600">
-                € {totaalBTW.toFixed(2)}
+                (BTW: € {totaalBTW.toFixed(2)})
               </td>
               <td className="p-4 text-right text-lg text-[#003B95] font-['Poppins']">
                 € {totaalGeneraal.toFixed(2)}
@@ -1234,51 +1443,41 @@ const OverzichtView = ({
           <thead className="bg-gray-50 text-gray-600">
             <tr>
               <th className="p-3">Grootboekrekening</th>
+              <th className="p-3 text-right">BTW %</th>
               <th className="p-3 text-right">Excl. BTW</th>
               <th className="p-3 text-right">BTW</th>
               <th className="p-3 text-right">Totaal</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">
-            {Object.keys(summary)
-              .sort()
-              .map((cat) => (
-                <tr key={cat}>
-                  <td className="p-3">{cat}</td>
-                  <td className="p-3 text-right">
-                    € {summary[cat].excl.toFixed(2)}
-                  </td>
-                  <td className="p-3 text-right">
-                    € {summary[cat].vat.toFixed(2)}
-                  </td>
-                  <td className="p-3 text-right">
-                    € {summary[cat].total.toFixed(2)}
-                  </td>
+            {Object.keys(summary).sort().map((key) => {
+              const row = summary[key];
+              return (
+                <tr key={key}>
+                  <td className="p-3">{row.name}</td>
+                  <td className="p-3 text-right text-gray-500 font-medium">{row.btw}</td>
+                  <td className="p-3 text-right">€ {row.excl.toFixed(2)}</td>
+                  <td className="p-3 text-right">€ {row.vat.toFixed(2)}</td>
+                  <td className="p-3 text-right font-bold">€ {row.total.toFixed(2)}</td>
                 </tr>
-              ))}
+              );
+            })}
           </tbody>
         </table>
       </div>
 
       <div className="flex gap-4 print:hidden mt-8">
         <button
-          onClick={() => window.print()}
-          className="flex-1 py-4 bg-gray-800 text-white rounded-xl font-bold shadow-lg hover:bg-gray-900 transition flex justify-center items-center gap-2 transform active:scale-95 font-['Poppins']"
-        >
-          <Save size={20} /> Opslaan als PDF
-        </button>
-        <button
           onClick={verzendAlles}
-          className="flex-1 py-4 bg-green-600 text-white rounded-xl font-bold shadow-lg hover:bg-green-700 transition flex justify-center items-center gap-2 transform active:scale-95 font-['Poppins']"
+          className="flex-1 py-4 bg-green-600 text-white rounded-xl font-bold shadow-lg hover:bg-green-700 transition flex justify-center items-center gap-2 transform active:scale-95 font-['Poppins'] text-lg"
         >
-          <Send size={20} /> Akkoord & Verzenden
+          <Send size={24} /> Akkoord & Verzenden
         </button>
       </div>
     </div>
   );
 };
 
-// --- AANPASSING: DEZE COMPONENT WAS DE BOOSDOENER ---
 const LoadingView = () => (
   <div className="flex flex-col items-center justify-center min-h-[80vh] text-center p-6 animate-in fade-in duration-500">
     <div className="mb-6 relative">
@@ -1295,9 +1494,7 @@ const LoadingView = () => (
 );
 
 const SuccesView = ({ setDeclaraties, setView, setActieveMedewerker }) => {
-  const [gifUrl] = useState(
-    () => MONEY_GIFS[Math.floor(Math.random() * MONEY_GIFS.length)]
-  );
+  const [gifUrl] = useState(() => MONEY_GIFS[Math.floor(Math.random() * MONEY_GIFS.length)]);
   return (
     <div className="flex flex-col items-center justify-center min-h-[60vh] text-center p-6 space-y-4 animate-in zoom-in duration-500">
       <div className="bg-green-100 p-6 rounded-full mb-4">
@@ -1335,7 +1532,6 @@ export default function App() {
   const [styleLoaded, setStyleLoaded] = useState(false);
   const [isIngelogd, setIsIngelogd] = useState(false);
 
-  // --- STIJLEN LADEN (Tailwind + Fonts) ---
   useEffect(() => {
     const script = document.createElement("script");
     script.src = "https://cdn.tailwindcss.com";
@@ -1344,19 +1540,15 @@ export default function App() {
     document.head.appendChild(script);
 
     const script2 = document.createElement("script");
-    script2.src =
-      "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
+    script2.src = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js";
     script2.async = true;
     script2.onload = () => {
-      window.pdfjsLib.GlobalWorkerOptions.workerSrc =
-        "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+      window.pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
     };
     document.head.appendChild(script2);
 
-    // HUISSTIJL FONTS LADEN (Poppins & Lato)
     const fontLink = document.createElement("link");
-    fontLink.href =
-      "https://fonts.googleapis.com/css2?family=Lato:wght@400;700&family=Poppins:wght@400;600;700&display=swap";
+    fontLink.href = "https://fonts.googleapis.com/css2?family=Lato:wght@400;700&family=Poppins:wght@400;600;700&display=swap";
     fontLink.rel = "stylesheet";
     document.head.appendChild(fontLink);
 
@@ -1380,37 +1572,73 @@ export default function App() {
   const [view, setView] = useState("medewerker");
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [medewerkers, setMedewerkers] = useState([]);
+  const [projecten, setProjecten] = useState([]);
   const [isLoadingMw, setIsLoadingMw] = useState(true);
-
   const [showGlobalPopup, setShowGlobalPopup] = useState(false);
 
-  const fetchMedewerkers = async () => {
+  const fetchBackendData = async () => {
     setIsLoadingMw(true);
     try {
-      if (GOOGLE_SCRIPT_URL.includes("PLAK_HIER"))
-        throw new Error("URL nog niet ingesteld");
-      const response = await fetch(GOOGLE_SCRIPT_URL);
-      const data = await response.json();
-      if (Array.isArray(data) && data.length > 0) setMedewerkers(data);
+      if (GOOGLE_SCRIPT_URL.includes("PLAK_HIER")) throw new Error("URL nog niet ingesteld");
+      
+      // Medewerkers Ophalen
+      const resMw = await fetch(GOOGLE_SCRIPT_URL);
+      const dataMw = await resMw.json();
+      if (Array.isArray(dataMw) && dataMw.length > 0) setMedewerkers(dataMw);
       else setMedewerkers(STANDAARD_MEDEWERKERS);
+
+      // Projecten Ophalen (Nieuwe API Call)
+      const resProj = await fetch(GOOGLE_SCRIPT_URL + "?action=get_projecten");
+      const dataProj = await resProj.json();
+      if (Array.isArray(dataProj) && dataProj.length > 0) {
+        setProjecten(dataProj);
+      } else {
+        // Fallback demo project
+        setProjecten([{ id: 1, naam: "Interne kosten", actief: true }]);
+      }
     } catch (error) {
       console.error("Offline:", error);
       setMedewerkers(STANDAARD_MEDEWERKERS);
+      setProjecten([{ id: 1, naam: "Interne kosten", actief: true }]);
     } finally {
       setIsLoadingMw(false);
     }
   };
+
   useEffect(() => {
-    fetchMedewerkers();
+    fetchBackendData();
   }, []);
+
+  const syncProjecten = async (nieuweLijst) => {
+    try {
+      await fetch(GOOGLE_SCRIPT_URL, {
+        method: "POST",
+        mode: "no-cors",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ action: "update_projecten", projecten: nieuweLijst }),
+      });
+    } catch (e) {
+      console.error("Fout bij opslaan projecten", e);
+    }
+  };
+
   const [actieveMedewerker, setActieveMedewerker] = useState(null);
   const [declaraties, setDeclaraties] = useState([]);
   const [huidigeDeclaratie, setHuidigeDeclaratie] = useState(null);
+  
+  // States om AI suggesties in het formulier te beheren
+  const [aiFields, setAiFields] = useState({});
+  const [categoryConfirmed, setCategoryConfirmed] = useState(false);
+
   useEffect(() => {
     if (actieveMedewerker && view === "medewerker") setView("home");
   }, [actieveMedewerker]);
 
   const startNieuweDeclaratie = (type) => {
+    // FIX VOOR DE BUG: Als je een nieuwe start, wissel het geheugen van de AI leeg!
+    setAiFields({}); 
+    setCategoryConfirmed(false); 
+
     setHuidigeDeclaratie({
       id: Date.now(),
       type: type,
@@ -1418,6 +1646,9 @@ export default function App() {
       bestand: null,
       bestandNaam: "",
       datum: "",
+      project: "",
+      projectNaam: "",
+      leverancier: "",
       omschrijving: "",
       bedragExcl: "",
       btwPercentage: "",
@@ -1431,38 +1662,42 @@ export default function App() {
     });
     setView("formulier");
   };
-  const kiesMethode = (methode) => {
-    setHuidigeDeclaratie({ ...huidigeDeclaratie, methode });
-    setView("formulier");
-  };
+
   const bewerkDeclaratie = (id) => {
     const itemToEdit = declaraties.find((d) => d.id === id);
     if (itemToEdit) {
+      setAiFields({}); // Bij handmatig bewerken resetten we AI blokkades
+      setCategoryConfirmed(false);
       setHuidigeDeclaratie(itemToEdit);
       setView("formulier");
     }
   };
+
   const opslaanDeclaratie = () => {
     const bestaatAl = declaraties.find((d) => d.id === huidigeDeclaratie.id);
+    // Zorg ervoor dat het project laatst gebruikt geupdate wordt
+    if (huidigeDeclaratie.project) {
+        const updatedProjs = projecten.map(p => p.id === huidigeDeclaratie.project ? { ...p, lastUsed: new Date().toISOString() } : p);
+        setProjecten(updatedProjs);
+        syncProjecten(updatedProjs);
+    }
+
     if (bestaatAl)
-      setDeclaraties(
-        declaraties.map((d) =>
-          d.id === huidigeDeclaratie.id ? huidigeDeclaratie : d
-        )
-      );
-    else setDeclaraties([...declaraties, huidigeDeclaratie]);
+      setDeclaraties(declaraties.map((d) => d.id === huidigeDeclaratie.id ? huidigeDeclaratie : d));
+    else 
+      setDeclaraties([...declaraties, huidigeDeclaratie]);
+    
     setHuidigeDeclaratie(null);
     setView("overzicht");
   };
+
   const verwijderDeclaratie = (id) => {
     setDeclaraties(declaraties.filter((d) => d.id !== id));
   };
 
   const verzendAlles = async () => {
     if (GOOGLE_SCRIPT_URL.includes("PLAK_HIER")) {
-      alert(
-        "LET OP: Je bent vergeten de Google Script URL in de code te plakken!"
-      );
+      alert("LET OP: Je bent vergeten de Google Script URL in de code te plakken!");
       return;
     }
     setIsSubmitting(true);
@@ -1475,16 +1710,29 @@ export default function App() {
         const isCustomBtw = d.btwPercentage === "custom";
         let excl = d.bedragExcl;
         let vatCalc = d.btwBedrag;
+        
+        // Zorg dat komma's verwerkt worden tot . voor de calculaties en database
+        const totNum = parseDecimalInput(d.totaalBedrag).rekenWaarde;
+
         if (!isCustomBtw && d.type !== "reiskosten") {
-          const totaal = parseFloat(d.totaalBedrag);
           const perc = parseFloat(d.btwPercentage);
-          const exclVal = totaal / (1 + perc / 100);
+          const exclVal = totNum / (1 + perc / 100);
           excl = exclVal.toFixed(2);
-          vatCalc = (totaal - exclVal).toFixed(2);
+          vatCalc = (totNum - exclVal).toFixed(2);
+        } else if(isCustomBtw) {
+          vatCalc = parseDecimalInput(d.btwBedrag).rekenWaarde || 0;
+          excl = (totNum - vatCalc).toFixed(2);
         }
-        return { ...d, bedragExcl: excl, btwBedrag: vatCalc };
+        
+        return { 
+          ...d, 
+          totaalBedrag: totNum.toFixed(2), // Zorgt dat het schoon opslaat in excel
+          bedragExcl: excl, 
+          btwBedrag: vatCalc 
+        };
       }),
     };
+
     try {
       await fetch(GOOGLE_SCRIPT_URL, {
         method: "POST",
@@ -1527,31 +1775,17 @@ export default function App() {
         style={{ backgroundColor: COLORS.primary }}
       >
         <div className="flex items-center gap-3">
-          <button
-            onClick={() => setView("home")}
-            className="flex items-center gap-2 hover:opacity-80 transition"
-          >
-            {/* Klein Logo in Nav */}
-            <img
-              src={LOGO_URL}
-              alt="The Declaratie Office"
-              className="h-10 object-contain brightness-0 invert"
-              style={{ filter: "brightness(0) invert(1)" }}
-            />
-            {/* Fallback als img faalt */}
-            <span className="font-bold text-xl text-white font-['Poppins'] hidden sm:block"></span>
+          <button onClick={() => setView("home")} className="flex items-center gap-2 hover:opacity-80 transition">
+            <img src={LOGO_URL} alt="The Declaratie Office" className="h-10 object-contain brightness-0 invert" style={{ filter: "brightness(0) invert(1)" }} />
           </button>
         </div>
         <div className="flex items-center gap-3">
           {view !== "succes" && (
             <button
-              onClick={() => {
-                if (declaraties.length > 0) setView("overzicht");
-              }}
+              onClick={() => { if (declaraties.length > 0) setView("overzicht"); }}
               className="flex items-center gap-1 text-sm bg-white/10 text-white px-3 py-1 rounded-full font-medium hover:bg-white/20 transition backdrop-blur-sm"
             >
-              <ShoppingCart size={14} /> {declaraties.length}{" "}
-              {declaraties.length === 1 ? "declaratie" : "declaraties"}
+              <ShoppingCart size={14} /> {declaraties.length} {declaraties.length === 1 ? "declaratie" : "declaraties"}
             </button>
           )}
           {actieveMedewerker && (
@@ -1559,10 +1793,7 @@ export default function App() {
               className="text-sm text-blue-100 hidden md:block cursor-pointer hover:text-white transition font-['Lato']"
               onClick={() => setShowGlobalPopup(true)}
             >
-              Ingelogd als:{" "}
-              <span className="font-bold font-['Poppins']">
-                {actieveMedewerker.naam}
-              </span>
+              Ingelogd als: <span className="font-bold font-['Poppins']">{actieveMedewerker.naam}</span>
             </div>
           )}
         </div>
@@ -1576,14 +1807,13 @@ export default function App() {
             setActieveMedewerker={setActieveMedewerker}
             setView={setView}
             isLoadingMw={isLoadingMw}
-            refreshMedewerkers={fetchMedewerkers}
+            refreshMedewerkers={fetchBackendData}
           />
         )}
         {view === "home" && (
           <HomeView
             setView={setView}
             actieveMedewerker={actieveMedewerker}
-            setActieveMedewerker={setActieveMedewerker}
             setShowGlobalPopup={setShowGlobalPopup}
           />
         )}
@@ -1601,6 +1831,13 @@ export default function App() {
             setView={setView}
             opslaanDeclaratie={opslaanDeclaratie}
             hasDeclaraties={declaraties.length > 0}
+            projecten={projecten}
+            setProjecten={setProjecten}
+            syncProjecten={syncProjecten}
+            aiFields={aiFields}
+            setAiFields={setAiFields}
+            categoryConfirmed={categoryConfirmed}
+            setCategoryConfirmed={setCategoryConfirmed}
           />
         )}
         {view === "overzicht" && (
@@ -1627,13 +1864,8 @@ export default function App() {
         <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4 backdrop-blur-sm">
           <div className="bg-white rounded-xl shadow-xl p-6 w-full max-w-sm text-left">
             <div className="flex justify-between items-center mb-4">
-              <h3 className="font-bold text-lg font-['Poppins'] text-[#003B95]">
-                Wissel Medewerker
-              </h3>
-              <button
-                onClick={() => setShowGlobalPopup(false)}
-                className="text-gray-400 hover:text-gray-600"
-              >
+              <h3 className="font-bold text-lg font-['Poppins'] text-[#003B95]">Wissel Medewerker</h3>
+              <button onClick={() => setShowGlobalPopup(false)} className="text-gray-400 hover:text-gray-600">
                 <X size={20} />
               </button>
             </div>
@@ -1647,19 +1879,14 @@ export default function App() {
                     if (view === "medewerker") setView("home");
                   }}
                   className={`w-full text-left p-3 rounded-lg border font-['Lato'] ${
-                    actieveMedewerker?.id === mw.id
-                      ? "bg-blue-50 border-[#003B95] text-[#003B95] font-bold"
-                      : "border-gray-200 hover:bg-gray-50"
+                    actieveMedewerker?.id === mw.id ? "bg-blue-50 border-[#003B95] text-[#003B95] font-bold" : "border-gray-200 hover:bg-gray-50"
                   }`}
                 >
                   {mw.naam}
                 </button>
               ))}
               <button
-                onClick={() => {
-                  setView("medewerker");
-                  setShowGlobalPopup(false);
-                }}
+                onClick={() => { setView("medewerker"); setShowGlobalPopup(false); }}
                 className="w-full text-center p-3 text-[#003B95] font-medium hover:bg-blue-50 rounded-lg mt-2 font-['Poppins']"
               >
                 + Iemand toevoegen
