@@ -50,7 +50,7 @@ const COLORS = {
 const GROOTBOEK_OPTIES = [
   { code: "4055", naam: "Kantinekosten" },
   { code: "4070", naam: "Representatie en verteer" },
-  { code: "4075", naam: "Onbelaste reiskosten (25 ct per km)" },
+  { code: "4075", naam: "Onbelaste reiskosten (23 ct per km)" },
   { code: "5520", naam: "Kantoorkosten" },
   { code: "5540", naam: "Verkoopkosten" },
   { code: "5570", naam: "Reis- en verblijfkosten" },
@@ -58,7 +58,7 @@ const GROOTBOEK_OPTIES = [
   { code: "7100", naam: "Inkoop derden (OOP)" },
 ];
 
-const KM_VERGOEDING = 0.25;
+const KM_VERGOEDING = 0.23;
 const STANDAARD_MEDEWERKERS = [
   { id: 1, naam: "Joep Pennartz", email: "joep.pennartz@theexperienceoffice.nl" },
   { id: 2, naam: "Joep Heerings", email: "joep.heerings@theexperienceoffice.nl" },
@@ -168,7 +168,8 @@ const ProjectDropdown = ({ value, onChange, projecten, setProjecten, syncProject
   const selectedProjectName = projecten.find(p => p.id === value)?.naam || "";
 
   const handleSelect = (id) => {
-    onChange(id);
+    const pName = projecten.find(p => p.id === id)?.naam || "";
+    onChange(id, pName); // Fix: geef ook direct de naam mee!
     setQuery("");
     setIsOpen(false);
   };
@@ -183,7 +184,7 @@ const ProjectDropdown = ({ value, onChange, projecten, setProjecten, syncProject
     };
     const updatedList = [...projecten, newProject];
     setProjecten(updatedList);
-    onChange(newProject.id);
+    onChange(newProject.id, newProject.naam); // Fix: geef direct de naam van het nieuwe project mee!
     setQuery("");
     setIsOpen(false);
     await syncProjecten(updatedList);
@@ -194,7 +195,7 @@ const ProjectDropdown = ({ value, onChange, projecten, setProjecten, syncProject
     if (window.confirm("Project archiveren en uit deze lijst halen?")) {
       const updatedList = projecten.map(p => p.id === id ? { ...p, actief: false } : p);
       setProjecten(updatedList);
-      if (value === id) onChange("");
+      if (value === id) onChange("", "");
       await syncProjecten(updatedList);
     }
   };
@@ -209,7 +210,7 @@ const ProjectDropdown = ({ value, onChange, projecten, setProjecten, syncProject
            <div className="flex-1 flex items-center justify-between">
               <span className="font-medium text-gray-800">{selectedProjectName}</span>
               <button 
-                onClick={(e) => { e.stopPropagation(); onChange(""); setIsOpen(true); }}
+                onClick={(e) => { e.stopPropagation(); onChange("", ""); setIsOpen(true); }}
                 className="text-gray-400 hover:text-gray-600"
               >
                 <X size={16} />
@@ -360,6 +361,7 @@ const MedewerkerView = ({
   const [nieuweNaam, setNieuweNaam] = useState("");
   const [nieuwEmail, setNieuwEmail] = useState("");
   const [isAdding, setIsAdding] = useState(false);
+  const [isSaving, setIsSaving] = useState(false); // Fix: voorkom dubbel wegschrijven
 
   const kiesMedewerker = (mw) => {
     setActieveMedewerker(mw);
@@ -383,12 +385,15 @@ const MedewerkerView = ({
   };
 
   const voegMedewerkerToe = async () => {
+    if (isSaving) return;
     if (nieuweNaam && nieuwEmail) {
+      setIsSaving(true);
       const nieuweMw = { id: Date.now(), naam: nieuweNaam, email: nieuwEmail };
       const nieuweLijst = [...medewerkers, nieuweMw];
       setMedewerkers(nieuweLijst);
       await syncMedewerkers(nieuweLijst);
       setActieveMedewerker(nieuweMw);
+      setIsSaving(false);
       setView("home");
     }
   };
@@ -466,6 +471,7 @@ const MedewerkerView = ({
               value={nieuweNaam}
               onChange={(e) => setNieuweNaam(e.target.value)}
               placeholder="Naam"
+              disabled={isSaving}
             />
             <input
               type="email"
@@ -473,19 +479,28 @@ const MedewerkerView = ({
               value={nieuwEmail}
               onChange={(e) => setNieuwEmail(e.target.value)}
               placeholder="Email"
+              disabled={isSaving}
             />
             <div className="flex gap-2 pt-2">
               <button
-                onClick={() => setIsAdding(false)}
+                onClick={() => { setIsAdding(false); setNieuweNaam(""); setNieuwEmail(""); }}
                 className="flex-1 py-2 text-gray-500 hover:bg-gray-100 rounded-lg font-['Lato']"
+                disabled={isSaving}
               >
                 Annuleren
               </button>
               <button
                 onClick={voegMedewerkerToe}
-                className="flex-1 py-2 bg-[#003B95] text-white rounded-lg hover:bg-blue-800 font-['Poppins'] font-bold"
+                disabled={isSaving || !nieuweNaam || !nieuwEmail}
+                className="flex-1 py-2 bg-[#003B95] text-white rounded-lg hover:bg-blue-800 font-['Poppins'] font-bold disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-1"
               >
-                Starten
+                {isSaving ? (
+                  <>
+                    <Loader className="animate-spin" size={16} /> Opslaan...
+                  </>
+                ) : (
+                  "Starten"
+                )}
               </button>
             </div>
           </div>
@@ -847,10 +862,9 @@ const FormulierView = ({
               <label className="block text-sm font-medium text-gray-700 mb-1">Project *</label>
               <ProjectDropdown 
                 value={huidigeDeclaratie.project}
-                onChange={(val) => {
+                onChange={(val, valNaam) => { // Fix: vang ook direct de projectnaam op
                   updateField("project", val);
-                  const pName = projecten.find(p => p.id === val)?.naam;
-                  updateField("projectNaam", pName || "");
+                  updateField("projectNaam", valNaam || "");
                 }}
                 projecten={projecten}
                 setProjecten={setProjecten}
@@ -959,7 +973,7 @@ const FormulierView = ({
                     value={huidigeDeclaratie.kilometers}
                     onChange={(e) => updateField("kilometers", e.target.value)}
                   />
-                  <p className="text-xs text-gray-500 mt-1">x €{KM_VERGOEDING}/km</p>
+                  <p className="text-xs text-gray-500 mt-1 font-medium font-sans">x €{KM_VERGOEDING}/km</p>
                 </div>
               </>
             )}
@@ -968,11 +982,11 @@ const FormulierView = ({
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-1">Totaalbedrag (incl. BTW) *</label>
                 <div className="relative">
-                  <span className="absolute left-3 top-3 text-gray-500">€</span>
+                  <span className="absolute left-3 top-3 text-gray-500 font-semibold">€</span>
                   <input
                     type="text"
                     inputMode="decimal"
-                    className={`w-full p-3 pl-8 border rounded-lg outline-none transition ${getFieldStyle("totaalBedrag")}`}
+                    className={`w-full p-3 pl-8 border rounded-lg outline-none font-bold ${getFieldStyle("totaalBedrag")}`}
                     placeholder="0.00"
                     value={huidigeDeclaratie.totaalBedrag}
                     onChange={(e) => updateField("totaalBedrag", e.target.value)}
@@ -984,7 +998,7 @@ const FormulierView = ({
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-1">BTW percentage *</label>
                   <select
-                    className={`w-full p-3 border rounded-lg bg-white ${getFieldStyle("btwPercentage")}`}
+                    className={`w-full p-3 border rounded-lg bg-white font-semibold ${getFieldStyle("btwPercentage")}`}
                     value={huidigeDeclaratie.btwPercentage}
                     onChange={(e) => updateField("btwPercentage", e.target.value)}
                   >
@@ -999,10 +1013,10 @@ const FormulierView = ({
             </div>
 
             {huidigeDeclaratie.type !== "reiskosten" && (
-              <div className="grid grid-cols-2 gap-4 bg-gray-50 p-3 rounded-lg text-sm text-gray-600 border border-gray-100 items-center">
+              <div className="grid grid-cols-2 gap-4 bg-gray-50 p-3 rounded-lg text-sm text-gray-600 border border-gray-100 items-center font-medium">
                 <div>
                   Excl. BTW:
-                  <span className="font-medium text-gray-900 block text-lg font-['Poppins']">
+                  <span className="font-bold text-gray-900 block text-lg font-['Poppins']">
                     € {huidigeDeclaratie.bedragExcl || "0.00"}
                   </span>
                 </div>
@@ -1010,18 +1024,18 @@ const FormulierView = ({
                   BTW Bedrag:
                   {isAfwijkendBtw ? (
                     <div className="relative mt-1">
-                      <span className="absolute left-2 top-2 text-gray-500">€</span>
+                      <span className="absolute left-2 top-2 text-gray-500 font-semibold">€</span>
                       <input
                         type="text"
                         inputMode="decimal"
-                        className="w-full p-2 pl-6 border border-blue-300 rounded focus:ring-2 focus:ring-[#003B95] outline-none bg-white"
+                        className="w-full p-2 pl-6 border border-blue-300 rounded focus:ring-2 focus:ring-[#003B95] outline-none bg-white font-semibold"
                         value={huidigeDeclaratie.btwBedrag}
                         onChange={(e) => updateField("btwBedrag", e.target.value)}
                         placeholder="0.00"
                       />
                     </div>
                   ) : (
-                    <span className="font-medium text-gray-900 block text-lg font-['Poppins']">
+                    <span className="font-bold text-gray-900 block text-lg font-['Poppins']">
                       € {huidigeDeclaratie.btwBedrag || "0.00"}
                     </span>
                   )}
@@ -1029,17 +1043,17 @@ const FormulierView = ({
               </div>
             )}
 
-            <div className={`p-4 rounded-xl border-2 transition-colors ${aiFields.grootboek ? "border-purple-300 bg-purple-50" : "border-transparent bg-transparent p-0"}`}>
+            <div className={`p-4 rounded-xl border-2 transition-colors ${aiFields.grootboek ? "border-purple-300 bg-purple-50/50" : "border-transparent bg-transparent p-0"}`}>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Grootboekrekening (Categorie) *
                 {aiFields.grootboek && (
-                  <span className="ml-2 text-purple-600 text-xs font-bold flex items-center inline-flex gap-1">
+                  <span className="ml-2 text-purple-600 text-xs font-bold inline-flex items-center gap-1 bg-purple-100 px-2 py-0.5 rounded-full">
                     <Sparkles size={10} /> AI Suggestie
                   </span>
                 )}
               </label>
               <select
-                className={`w-full p-3 border border-gray-300 rounded-lg bg-white ${getFieldStyle("grootboek")}`}
+                className={`w-full p-3 border rounded-lg bg-white font-semibold ${getFieldStyle("grootboek")}`}
                 value={huidigeDeclaratie.grootboek}
                 onChange={(e) => updateField("grootboek", e.target.value)}
                 disabled={huidigeDeclaratie.type === "reiskosten"}
@@ -1055,11 +1069,11 @@ const FormulierView = ({
                 <label className="flex items-center gap-3 mt-3 cursor-pointer p-2 hover:bg-purple-100 rounded-lg transition">
                   <input
                     type="checkbox"
-                    className="w-5 h-5 text-purple-600 rounded focus:ring-purple-500"
+                    className="w-5 h-5 text-purple-600 rounded border-purple-300 focus:ring-purple-500"
                     checked={categoryConfirmed}
                     onChange={(e) => setCategoryConfirmed(e.target.checked)}
                   />
-                  <span className="text-sm font-medium text-purple-800">Ik bevestig deze categorie</span>
+                  <span className="text-sm font-bold text-purple-800">Ik bevestig deze categorie</span>
                 </label>
               )}
             </div>
@@ -1068,7 +1082,7 @@ const FormulierView = ({
           <div className="flex gap-3 mt-8 pt-4 border-t border-gray-100">
             <button
               onClick={handleCancel}
-              className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-medium hover:bg-gray-200 transition font-['Lato']"
+              className="flex-1 py-3 bg-gray-100 text-gray-700 rounded-xl font-bold hover:bg-gray-200 transition font-['Lato']"
             >
               Annuleren
             </button>
@@ -1089,7 +1103,7 @@ const FormulierView = ({
               <h3 className="font-bold text-gray-700 mb-3 flex items-center gap-2 font-['Poppins']">
                 <Eye size={18} /> Voorbeeld Factuur
               </h3>
-              <div className="border border-gray-200 rounded-lg overflow-hidden shadow-sm">
+              <div className="border border-gray-200 rounded-lg overflow-hidden shadow-sm bg-gray-50 p-2">
                 {huidigeDeclaratie.bestandData.startsWith("data:application/pdf") ? (
                   <iframe
                     src={huidigeDeclaratie.bestandData}
@@ -1100,7 +1114,7 @@ const FormulierView = ({
                   <img
                     src={huidigeDeclaratie.bestandData}
                     alt="Factuur"
-                    className="w-full h-auto object-contain"
+                    className="w-full h-auto max-h-[600px] object-contain mx-auto"
                   />
                 )}
               </div>
@@ -1111,7 +1125,7 @@ const FormulierView = ({
 
       {showSplitView && huidigeDeclaratie.bestandData && (
         <div
-          className="fixed inset-0 z-50 bg-black/80 md:hidden flex items-center justify-center p-4"
+          className="fixed inset-0 z-50 bg-black/80 md:hidden flex items-center justify-center p-4 shadow-2xl"
           onClick={() => setShowSplitView(false)}
         >
           <div
@@ -1120,7 +1134,7 @@ const FormulierView = ({
           >
             <button
               onClick={() => setShowSplitView(false)}
-              className="absolute top-2 right-2 bg-gray-900/50 text-white p-2 rounded-full z-10"
+              className="absolute top-2 right-2 bg-gray-900/50 text-white p-2 rounded-full z-10 hover:bg-gray-900 transition"
             >
               <X size={20} />
             </button>
@@ -1186,15 +1200,15 @@ const OverzichtView = ({
             Declaratie-overzicht
           </h2>
           <div
-            className="text-gray-500 flex items-center gap-1 cursor-pointer hover:text-[#003B95] transition font-['Lato']"
+            className="text-gray-500 font-semibold flex items-center gap-1.5 cursor-pointer hover:text-[#003B95] transition font-['Lato']"
             onClick={() => setShowGlobalPopup(true)}
           >
-            Medewerker: <span className="font-semibold">{actieveMedewerker?.naam}</span> <Pencil size={12} />
+            Medewerker: <span className="font-bold underline">{actieveMedewerker?.naam}</span> <Pencil size={12} className="text-gray-400" />
           </div>
         </div>
         <button
           onClick={() => setView("keuze_type")}
-          className="bg-blue-100 text-blue-700 px-4 py-2 rounded-lg font-medium hover:bg-blue-200 flex items-center gap-2 transition font-['Lato']"
+          className="bg-blue-100 text-blue-700 px-4 py-2.5 rounded-lg font-bold hover:bg-blue-200 flex items-center gap-2 transition font-['Lato']"
         >
           <Plus size={18} /> Nog een declaratie toevoegen
         </button>
@@ -1202,7 +1216,7 @@ const OverzichtView = ({
 
       <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden mb-6">
         <table className="w-full text-left font-['Lato']">
-          <thead className="bg-gray-50 text-gray-600 text-sm">
+          <thead className="bg-gray-50 text-gray-500 font-bold text-xs uppercase tracking-wider">
             <tr>
               <th className="p-4">Factuurdatum</th>
               <th className="p-4">Project / Lev / Omschrijving</th>
@@ -1214,16 +1228,16 @@ const OverzichtView = ({
           </thead>
           <tbody className="divide-y divide-gray-100">
             {declaraties.map((dec) => (
-              <tr key={dec.id} className="hover:bg-gray-50 transition">
-                <td className="p-4 text-sm text-gray-500 whitespace-nowrap align-top">
+              <tr key={dec.id} className="hover:bg-gray-50 transition duration-150">
+                <td className="p-4 text-sm font-semibold text-gray-500 whitespace-nowrap align-top">
                   {formatDateNL(dec.datum)}
                 </td>
                 <td className="p-4 font-medium text-gray-900 align-top">
                   <div className="text-xs font-bold text-[#003B95] uppercase mb-1">{dec.projectNaam || "Geen project"}</div>
                   {dec.type === "reiskosten" ? (
                     <>
-                      <div>{dec.omschrijving}</div>
-                      <div className="text-xs text-gray-500 mt-1">
+                      <div className="font-bold text-gray-800 text-sm">{dec.omschrijving}</div>
+                      <div className="text-xs text-gray-500 mt-1 font-medium italic">
                         <span className={`font-bold ${dec.isRetour ? "text-[#003B95]" : "text-gray-600"}`}>
                           {dec.isRetour ? "RETOUR" : "ENKEL"}
                         </span>
@@ -1232,38 +1246,38 @@ const OverzichtView = ({
                     </>
                   ) : (
                     <>
-                      <div className="text-sm font-semibold">{dec.leverancier || "Onbekende Lev."}</div>
-                      <div className="text-sm font-normal text-gray-600">{dec.omschrijving}</div>
+                      <div className="font-bold text-gray-800 text-sm">{dec.leverancier || "Onbekende Lev."}</div>
+                      <div className="text-xs text-gray-500 font-medium mt-0.5">{dec.omschrijving}</div>
                     </>
                   )}
                   {dec.bestandNaam && (
-                    <span className="block text-xs text-green-600 flex items-center gap-1 mt-2">
+                    <span className="inline-flex items-center gap-1 text-xs text-green-700 font-bold bg-green-50 px-2 py-0.5 rounded-full mt-2">
                       <FileText size={12} /> {dec.bestandNaam}
                     </span>
                   )}
                 </td>
                 <td className="p-4 text-sm align-top">
-                  <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-mono">
+                  <span className="bg-gray-100 text-gray-600 px-2 py-1 rounded text-xs font-mono font-bold">
                     {dec.grootboek || "N/A"}
                   </span>
                 </td>
-                <td className="p-4 text-right text-sm text-gray-600 align-top">
+                <td className="p-4 text-right text-sm font-semibold text-gray-500 align-top">
                   {dec.btwPercentage === "custom" ? "Afwijkend" : (dec.btwPercentage ? dec.btwPercentage + "%" : "0%")}
                 </td>
                 <td className="p-4 text-right font-bold text-gray-900 align-top">
                   € {parseFloat(String(dec.totaalBedrag).replace(',', '.')).toFixed(2)}
                 </td>
-                <td className="p-4 print:hidden flex justify-center gap-2 align-top">
+                <td className="p-4 print:hidden flex justify-center gap-1.5 align-top">
                   <button
                     onClick={() => bewerkDeclaratie(dec.id)}
-                    className="text-blue-400 hover:text-blue-600 transition p-2 hover:bg-blue-50 rounded-full"
+                    className="text-blue-500 hover:text-blue-700 hover:bg-blue-50 p-2 rounded-full transition"
                     title="Bewerken"
                   >
                     <Pencil size={18} />
                   </button>
                   <button
                     onClick={() => verwijderDeclaratie(dec.id)}
-                    className="text-red-400 hover:text-red-600 transition p-2 hover:bg-red-50 rounded-full"
+                    className="text-red-500 hover:text-red-700 hover:bg-red-50 p-2 rounded-full transition"
                     title="Verwijderen"
                   >
                     <Trash2 size={18} />
@@ -1274,13 +1288,13 @@ const OverzichtView = ({
           </tbody>
           <tfoot className="bg-gray-50 font-bold border-t border-gray-200">
             <tr>
-              <td colSpan="3" className="p-4 text-right text-gray-600">
+              <td colSpan="3" className="p-4 text-right text-gray-500 text-sm">
                 Totaal deze declaratie:
               </td>
-              <td className="p-4 text-right text-gray-600">
-                (BTW: € {totaalBTW.toFixed(2)})
+              <td className="p-4 text-right text-gray-500 text-xs">
+                BTW: € {totaalBTW.toFixed(2)} {/* Fix: ronde haakjes verwijderd */}
               </td>
-              <td className="p-4 text-right text-lg text-[#003B95] font-['Poppins']">
+              <td className="p-4 text-right text-xl text-[#003B95] font-extrabold font-['Poppins']">
                 € {totaalGeneraal.toFixed(2)}
               </td>
               <td className="print:hidden"></td>
@@ -1294,7 +1308,7 @@ const OverzichtView = ({
           Boekhoudkundige samenvatting
         </div>
         <table className="w-full text-left text-sm font-['Lato']">
-          <thead className="bg-gray-50 text-gray-600">
+          <thead className="bg-gray-50 text-gray-600 font-bold">
             <tr>
               <th className="p-3">Grootboekrekening</th>
               <th className="p-3 text-right">BTW %</th>
@@ -1308,11 +1322,11 @@ const OverzichtView = ({
               const row = summary[key];
               return (
                 <tr key={key}>
-                  <td className="p-3">{row.name}</td>
-                  <td className="p-3 text-right text-gray-500 font-medium">{row.btw}</td>
+                  <td className="p-3 font-semibold text-gray-800">{row.name}</td>
+                  <td className="p-3 text-right text-gray-500 font-bold">{row.btw}</td>
                   <td className="p-3 text-right">€ {row.excl.toFixed(2)}</td>
                   <td className="p-3 text-right">€ {row.vat.toFixed(2)}</td>
-                  <td className="p-3 text-right font-bold">€ {row.total.toFixed(2)}</td>
+                  <td className="p-3 text-right font-extrabold text-[#003B95]">€ {row.total.toFixed(2)}</td>
                 </tr>
               );
             })}
@@ -1342,7 +1356,7 @@ const LoadingView = () => (
     <h2 className="text-2xl font-bold text-gray-800 mb-2 font-['Poppins']">
       Een ogenblik geduld...
     </h2>
-    <p className="text-gray-500 max-w-xs font-['Lato']">
+    <p className="text-gray-500 max-w-xs font-semibold font-['Lato']">
       We zijn je declaratie aan het verwerken en opslaan in de administratie.
     </p>
   </div>
@@ -1376,7 +1390,7 @@ const SuccesView = ({ setDeclaraties, setView, setActieveMedewerker }) => {
           setActieveMedewerker(null);
           setView("medewerker");
         }}
-        className="text-[#003B95] hover:text-blue-800 font-medium mt-8 flex items-center gap-2 font-['Poppins']"
+        className="text-[#003B95] hover:text-blue-800 font-bold mt-8 flex items-center gap-2 font-['Poppins']"
       >
         <ArrowRight size={16} /> Terug naar start
       </button>
@@ -1449,7 +1463,7 @@ export default function App() {
         setProjecten([{ id: 1, naam: "Interne kosten", actief: true }]);
       }
     } catch (error) {
-      console.error("Offline:", error);
+      console.error("Offline fallback:", error);
       setMedewerkers(STANDAARD_MEDEWERKERS);
       setProjecten([{ id: 1, naam: "Interne kosten", actief: true }]);
     } finally {
